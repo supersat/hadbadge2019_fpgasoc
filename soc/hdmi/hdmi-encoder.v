@@ -8,7 +8,10 @@ module hdmi_encoder (
 	input [7:0] green,
 	input [7:0] blue,
 	output next_line,
-	output next_field
+	output next_field,
+
+	input [15:0] audio_left,
+	input [15:0] audio_right
 );
 
 	parameter C_ddr = 1'b1; // 0:SDR 1:DDR

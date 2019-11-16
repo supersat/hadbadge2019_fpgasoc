@@ -120,6 +120,8 @@ module top_fpga(
 	wire [7:0] vid_green;
 	wire [7:0] vid_blue;
 
+	wire [15:0] audio_left;
+	wire [15:0] audio_right;
 
 	reg [31:0] jdreg_done;
 	reg jdsel_done;
@@ -244,7 +246,10 @@ module top_fpga(
 		.sao2_oe(sao2_oe),
 		.pmod_in(pmod_in),
 		.pmod_out(pmod_out),
-		.pmod_oe(pmod_oe)
+		.pmod_oe(pmod_oe),
+
+		.audio_left(audio_left),
+		.audio_right(audio_right)
 	);
 
 	sysmgr sysmgr_I (
@@ -268,6 +273,9 @@ module top_fpga(
 		.blue(vid_blue),
 		.next_line(vid_next_line),
 		.next_field(vid_next_field),
+
+		.audio_left(audio_left),
+		.audio_right(audio_right),
 	);
 
 	genvar i;

@@ -108,6 +108,9 @@ module soc(
 		output reg [7:0] pmod_out,
 		output reg [7:0] pmod_oe,
 		
+		output [15:0] audio_left,
+		output [15:0] audio_right,
+		
 		output reg trace_en
 	);
 
@@ -677,6 +680,9 @@ module soc(
 	wire [15:0] audio_r;
 	wire [15:0] audio_pdm;
 	wire irq_audio;
+
+	assign audio_left = audio_l;
+	assign audio_right = audio_r;
 
 	audio_wb audio_I (
 		.audio_out_l(audio_l),
