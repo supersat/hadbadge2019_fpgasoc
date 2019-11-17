@@ -60,6 +60,7 @@
 // no timescale needed
 
 module vga2dvid(
+input wire rst,
 input wire clk_pixel,
 input wire clk_shift,
 input wire [C_depth - 1:0] in_red,
@@ -68,6 +69,10 @@ input wire [C_depth - 1:0] in_blue,
 input wire in_blank,
 input wire in_hsync,
 input wire in_vsync,
+input wire [15:0] in_audio_left,
+input wire [15:0] in_audio_right,
+input wire [9:0] CounterX,
+input wire [9:0] CounterY,
 output wire [9:0] outp_red,
 output wire [9:0] outp_green,
 output wire [9:0] outp_blue,
@@ -87,7 +92,48 @@ parameter [31:0] C_depth=8;
 // parallel outputs
 // serial outputs
 
+// Audio sampler
+wire [31:0] audio_fifo_in = { in_audio_left, in_audio_right };
+wire [31:0] audio_fifo_out;
+wire [15:0] audio_fifo_out_left;
+wire [15:0] audio_fifo_out_right;
+wire audio_fifo_empty;
 
+assign audio_fifo_out_left = audio_fifo_out[31:16];
+assign audio_fifo_out_right = audio_fifo_out[15:0];
+
+// For 32kHz audio, you get 4 samples every 3125 pixel clocks
+reg [11:0] audio_fifo_wr_clk_div_ctr;
+wire audio_fifo_wr_en;
+assign audio_fifo_wr_en =
+  (audio_fifo_wr_clk_div_ctr == 12'd0) ||
+  (audio_fifo_wr_clk_div_ctr == 12'd1563) ||
+  (audio_fifo_wr_clk_div_ctr == 12'd2344);
+
+wire audio_fifo_rd_en;
+assign audio_fifo_rd_en = 1'b0; // FIXME
+
+always @(posedge clk_pixel) begin
+  if (rst || audio_fifo_wr_clk_div_ctr >= 12'd3125)
+    audio_fifo_wr_clk_div_ctr = 0;
+  else
+    audio_fifo_wr_clk_div_ctr = audio_fifo_wr_clk_div_ctr + 1;
+end
+
+/*
+fifo_sync_ram #(
+  .DEPTH(64),
+  .WIDTH(32)
+) fifo_evt_I (
+	.wr_data(audio_fifo_in),
+	.wr_ena(audio_fifo_wr_en),
+	.rd_data(audio_fifo_out),
+	.rd_ena(audio_fifo_rd_en),
+	.rd_empty(audio_fifo_empty),
+	.clk(clk_pixel),
+	.rst(rst)
+);
+*/
 
 wire [9:0] encoded_red; wire [9:0] encoded_green; wire [9:0] encoded_blue;
 reg [9:0] latched_red = 1'b0; reg [9:0] latched_green = 1'b0; reg [9:0] latched_blue = 1'b0;
@@ -167,11 +213,77 @@ wire [7:0] blue_d;
     .blank(in_blank),
     .encoded(encoded_blue));
 
+/*
+  wire [9:0] terc4_encoded_red;
+  wire [9:0] terc4_encoded_green;
+  wire [9:0] terc4_encoded_blue;
+
+  terc4_encoder red_terc4(
+    .in(),
+    .out(terc4_encoded_red)
+  );
+
+  terc4_encoder green_terc4(
+    .in(),
+    .out(terc4_encoded_green)
+  );
+
+  terc4_encoder blue_terc4(
+    .in(),
+    .out(terc4_encoded_blue)
+  );
+
+  reg [23:0] pkt_header;
+  reg [7:0] pkt_data [0:6];
+*/
+
   always @(posedge clk_pixel) begin
-    latched_red <= encoded_red;
-    latched_green <= encoded_green;
-    latched_blue <= encoded_blue;
+    if (CounterX < 672) begin // Active pixel data and beginning of hsync pulse
+      latched_red <= encoded_red;
+      latched_green <= encoded_green;
+      latched_blue <= encoded_blue;
+    end /*else if (CounterX < 674) begin // Data island leading guard band
+      latched_red <= 10'b0100110011;
+      latched_green <= 10'b0100110011;
+      latched_blue <= encoded_blue;
+    end else if (CounterX < 706) begin // Data island packet 1
+      latched_red <= terc4_encoded_red;
+      latched_green <= terc4_encoded_green;
+      latched_blue <= terc4_encoded_blue;
+    end else if (CounterX < 738) begin // Data island packet 2
+      latched_red <= terc4_encoded_red;
+      latched_green <= terc4_encoded_green;
+      latched_blue <= terc4_encoded_blue;
+    end else if (CounterX < 740) begin // Data island trailing guard band
+      latched_red <= 10'b0100110011;
+      latched_green <= 10'b0100110011;
+      latched_blue <= encoded_blue;
+    end else if (CounterX < 798) begin // Regular ctrl period
+      latched_red <= encoded_red;
+      latched_green <= encoded_green;
+      latched_blue <= encoded_blue;
+    end */ else begin // Video Guard Band
+      latched_red <= 10'b1011001100;
+      latched_green <= 10'b0100110011;
+      latched_blue <= 10'b1011001100;
+    end
   end
+
+  // Generate data island packets
+  /*
+  always @(posedge clk_pixel) begin
+    // Generate video Auxiliary Video information Video Infoframe
+    if (CounterX == 0 && CounterY == 524) begin
+      pkt_header <= 24'h0b0282;
+      pkt_data[0] <= 8'h02; // Underscanned
+      pkt_data[1] <= 8'h18; // 4:3
+      pkt_data[2] <= 8'h00; // No scaling
+      pkt_data[3] <= 8'h00; // Reserved
+      pkt_data[4] <= 8'h00; // Reserved
+      pkt_data[5] <= 8'h00; // Reserved
+    end
+  end
+  */
 
   generate if (C_parallel == 1'b1) begin: G_parallel
       assign outp_red = latched_red;

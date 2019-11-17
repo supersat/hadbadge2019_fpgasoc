@@ -53,7 +53,9 @@ output wire next_field,
 output wire vga_hsync,
 output wire vga_vsync,
 output wire vga_vblank,
-output wire vga_blank
+output wire vga_blank,
+output reg [C_bits_x - 1:0] CounterX,
+output reg [C_bits_x - 1:0] CounterY
 );
 
 parameter [31:0] C_resolution_x=640;
@@ -95,8 +97,8 @@ parameter C_frame_y = C_resolution_y + C_vsync_front_porch + C_vsync_pulse + C_v
 parameter C_synclen = 3;  // >=2, bit length of the clock synchronizer shift register
 //constant C_bits_x: integer := 13; -- ceil_log2(C_frame_x-1)
 //constant C_bits_y: integer := 11; -- ceil_log2(C_frame_y-1)
-reg [C_bits_x - 1:0] CounterX;  // (9 downto 0) is good for up to 1023 frame timing width (resolution 640x480)
-reg [C_bits_y - 1:0] CounterY;  // (9 downto 0) is good for up to 1023 frame timing width (resolution 640x480)
+//reg [C_bits_x - 1:0] CounterX;  // (9 downto 0) is good for up to 1023 frame timing width (resolution 640x480)
+//reg [C_bits_y - 1:0] CounterY;  // (9 downto 0) is good for up to 1023 frame timing width (resolution 640x480)
 reg hSync; reg vSync; reg vBlank; reg DrawArea; wire fetcharea;
 wire [C_synclen - 1:0] clksync;  // fifo to clock synchronizer shift register
 wire [7:0] shift_red; wire [7:0] shift_green; wire [7:0] shift_blue;  // RENAME shift_ -> latch_

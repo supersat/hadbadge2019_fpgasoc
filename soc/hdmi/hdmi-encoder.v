@@ -41,6 +41,7 @@ module hdmi_encoder (
 	// VGA signal generator
 	wire [7:0] vga_r, vga_g, vga_b;
 	wire vga_hsync, vga_vsync, vga_blank;
+	wire [9:0] CounterX, CounterY;
 	vga vga_instance (
 		.clk_pixel(clk_pixel),
 		.test_picture(1'b0), // enable test picture generation
@@ -55,7 +56,9 @@ module hdmi_encoder (
 		.next_field(next_field),
 		.vga_hsync(vga_hsync),
 		.vga_vsync(vga_vsync),
-		.vga_blank(vga_blank)
+		.vga_blank(vga_blank),
+		.CounterX(CounterX),
+		.CounterY(CounterY)
 	);
 
 	// VGA to digital video converter
@@ -63,6 +66,7 @@ module hdmi_encoder (
 	vga2dvid #(
 		.C_ddr(C_ddr)
 	) vga2dvid_instance (
+		.rst(!clk_locked), // TODO: Is this right?
 		.clk_pixel(clk_pixel),
 		.clk_shift(clk_shift),
 		.in_red(vga_r),
@@ -71,6 +75,10 @@ module hdmi_encoder (
 		.in_hsync(vga_hsync),
 		.in_vsync(vga_vsync),
 		.in_blank(vga_blank),
+		.in_audio_left(audio_left),
+		.in_audio_right(audio_right),
+		.CounterX(CounterX),
+		.CounterY(CounterY),
 		.out_clock(tmds[3]),
 		.out_red(tmds[2]),
 		.out_green(tmds[1]),
