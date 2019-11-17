@@ -110,8 +110,7 @@ assign audio_fifo_wr_en =
   (audio_fifo_wr_clk_div_ctr == 12'd1563) ||
   (audio_fifo_wr_clk_div_ctr == 12'd2344);
 
-wire audio_fifo_rd_en;
-assign audio_fifo_rd_en = 1'b0; // FIXME
+reg audio_fifo_rd_en;
 
 always @(posedge clk_pixel) begin
   if (rst || audio_fifo_wr_clk_div_ctr >= 12'd3125)
@@ -120,7 +119,6 @@ always @(posedge clk_pixel) begin
     audio_fifo_wr_clk_div_ctr = audio_fifo_wr_clk_div_ctr + 1;
 end
 
-/*
 fifo_sync_ram #(
   .DEPTH(64),
   .WIDTH(32)
@@ -133,7 +131,6 @@ fifo_sync_ram #(
 	.clk(clk_pixel),
 	.rst(rst)
 );
-*/
 
 wire [9:0] encoded_red; wire [9:0] encoded_green; wire [9:0] encoded_blue;
 reg [9:0] latched_red = 1'b0; reg [9:0] latched_green = 1'b0; reg [9:0] latched_blue = 1'b0;
@@ -213,77 +210,136 @@ wire [7:0] blue_d;
     .blank(in_blank),
     .encoded(encoded_blue));
 
-/*
-  wire [9:0] terc4_encoded_red;
-  wire [9:0] terc4_encoded_green;
-  wire [9:0] terc4_encoded_blue;
+  function terc4_encode;
+  input [3:0] terc4_in;
+  output [9:0] terc4_out;
+  begin
+    case (terc4_in)
+      4'b0000: terc4_out = 10'b1010011100;
+      4'b0001: terc4_out = 10'b1001100011;
+      4'b0010: terc4_out = 10'b1011100100;
+      4'b0011: terc4_out = 10'b1011100010;
+      4'b0100: terc4_out = 10'b0101110001;
+      4'b0101: terc4_out = 10'b0100011110;
+      4'b0110: terc4_out = 10'b0110001110;
+      4'b0111: terc4_out = 10'b0100111100;
+      4'b1000: terc4_out = 10'b1011001100;
+      4'b1001: terc4_out = 10'b0100111001;
+      4'b1010: terc4_out = 10'b0110011100;
+      4'b1011: terc4_out = 10'b1011000110;
+      4'b1100: terc4_out = 10'b1010001110;
+      4'b1101: terc4_out = 10'b1001110001;
+      4'b1110: terc4_out = 10'b0101100011;
+      4'b1111: terc4_out = 10'b0101100011;
+    endcase
+  end
+  endfunction
 
-  terc4_encoder red_terc4(
-    .in(),
-    .out(terc4_encoded_red)
-  );
-
-  terc4_encoder green_terc4(
-    .in(),
-    .out(terc4_encoded_green)
-  );
-
-  terc4_encoder blue_terc4(
-    .in(),
-    .out(terc4_encoded_blue)
-  );
-
-  reg [23:0] pkt_header;
-  reg [7:0] pkt_data [0:6];
-*/
+  reg [63:0] pkt_header;
+  reg [127:0] subpkt0_data;
+  reg [127:0] subpkt1_data;
+  reg [127:0] subpkt2_data;
+  reg [127:0] subpkt3_data;
 
   always @(posedge clk_pixel) begin
     if (CounterX < 672) begin // Active pixel data and beginning of hsync pulse
       latched_red <= encoded_red;
       latched_green <= encoded_green;
       latched_blue <= encoded_blue;
-    end /*else if (CounterX < 674) begin // Data island leading guard band
+    end else if (CounterX < 680) begin // Data island preamble
+      latched_red <= 0'b0010101011; // CTL2=1, CTL3=0
+      latched_green <= 10'b0010101011;  // CTL0=1, CTL1=0
+      latched_blue <= encoded_blue; // Regular hsync/vsync signal
+    end else if (CounterX < 688) begin // Data island leading guard band
+      latched_red <= 10'b0100110011;
+      latched_green <= 10'b0100110011;
+      latched_blue <= in_vsync ? 10'b0101100011 : 10'b1001110001;
+    end else if (CounterX < 690) begin // Data island packets
+      latched_red <=   terc4_encode({ subpkt3_data[(CounterX - 690) * 2 + 1],
+                                      subpkt2_data[(CounterX - 690) * 2 + 1],
+                                      subpkt1_data[(CounterX - 690) * 2 + 1],
+                                      subpkt0_data[(CounterX - 690) * 2 + 1] });
+      latched_green <= terc4_encode({ subpkt3_data[(CounterX - 690) * 2],
+                                      subpkt2_data[(CounterX - 690) * 2],
+                                      subpkt1_data[(CounterX - 690) * 2],
+                                      subpkt0_data[(CounterX - 690) * 2] });
+      latched_blue <= terc4_encode({ CounterX == 690, pkt_header[CounterX - 690], in_vsync, in_hsync });
+    end else if (CounterX < 754) begin // Data island trailing guard band
       latched_red <= 10'b0100110011;
       latched_green <= 10'b0100110011;
       latched_blue <= encoded_blue;
-    end else if (CounterX < 706) begin // Data island packet 1
-      latched_red <= terc4_encoded_red;
-      latched_green <= terc4_encoded_green;
-      latched_blue <= terc4_encoded_blue;
-    end else if (CounterX < 738) begin // Data island packet 2
-      latched_red <= terc4_encoded_red;
-      latched_green <= terc4_encoded_green;
-      latched_blue <= terc4_encoded_blue;
-    end else if (CounterX < 740) begin // Data island trailing guard band
-      latched_red <= 10'b0100110011;
-      latched_green <= 10'b0100110011;
-      latched_blue <= encoded_blue;
-    end else if (CounterX < 798) begin // Regular ctrl period
+    end else if (CounterX < 790) begin  // Regular ctrl period
       latched_red <= encoded_red;
       latched_green <= encoded_green;
-      latched_blue <= encoded_blue;
-    end */ else begin // Video Guard Band
+      latched_blue <= encoded_blue; 
+    end else if (CounterX < 798) begin // Video island preamble
+      latched_red <= 10'b1101010100; // CTL2=0, CTL3=0
+      latched_green <= 10'b0010101011; // CTL0=1, CTL1=0
+      latched_blue <= encoded_blue; // Regular hsync/vsync signal
+    end else begin // Video Guard Band
       latched_red <= 10'b1011001100;
       latched_green <= 10'b0100110011;
       latched_blue <= 10'b1011001100;
     end
   end
 
+  localparam [191:0] channelStatus = 192'hc203004004; // 32KHz 16-bit LPCM audio
+  reg [7:0] channelStatusIdx;
+  
   // Generate data island packets
-  /*
   always @(posedge clk_pixel) begin
-    // Generate video Auxiliary Video information Video Infoframe
-    if (CounterX == 0 && CounterY == 524) begin
-      pkt_header <= 24'h0b0282;
-      pkt_data[0] <= 8'h02; // Underscanned
-      pkt_data[1] <= 8'h18; // 4:3
-      pkt_data[2] <= 8'h00; // No scaling
-      pkt_data[3] <= 8'h00; // Reserved
-      pkt_data[4] <= 8'h00; // Reserved
-      pkt_data[5] <= 8'h00; // Reserved
+    audio_fifo_rd_en <= 1'b0;
+
+    // Generate Auxiliary Video information video and audio inforframes
+    if (CounterY == 524 && CounterX == 0) begin
+      pkt_header[23:0] <= 24'h0d_02_82;
+      pkt_header[55:32] <= 24'h0a_01_84;
+      subpkt0_data[55:0] <= 56'h00_10_02_97;
+      subpkt1_data[55:0] <= 56'h0;
+      subpkt2_data[55:0] <= 56'h0;
+      subpkt3_data[55:0] <= 56'h0;
+      subpkt0_data[119:64] <= 56'h11_60;
+      subpkt1_data[119:64] <= 56'h0;
+      subpkt2_data[119:64] <= 56'h0;
+      subpkt3_data[119:64] <= 56'h0;
+    end else if (CounterY == 0 && CounterX == 0) begin // Generate Audio Clock Regeneration
+      pkt_header[23:0] <= 24'h00_00_01;
+      subpkt0_data[55:0] <= 56'h00_10_00_18_6a_00_00;
+    end else if (CounterX == 0 && !audio_fifo_empty) begin // Generate audio sample packet if possible
+      pkt_header[23:0] <= (channelStatusIdx == 0) ? 24'h10_11_02 : 24'h00_11_02;
+      subpkt0_data[7:0] <= 8'h0;
+      subpkt0_data[15:8] <= audio_fifo_out_left[7:0];
+      subpkt0_data[23:15] <= audio_fifo_out_left[15:8];
+      subpkt0_data[31:24] <= 8'h0;
+      subpkt0_data[39:32] <= audio_fifo_out_right[7:0];
+      subpkt0_data[47:40] <= audio_fifo_out_right[15:8];
+      subpkt0_data[55:48] <= (8'h11 | // Both channels valid
+        (^audio_fifo_out_left ? 8'h08 : 8'h00) |
+        (^audio_fifo_out_right ? 8'h80 : 8'h00)) ^
+        (channelStatus[channelStatusIdx] ? 8'hcc : 8'h00);
+      audio_fifo_rd_en <= 1'b1;
+    end else if (CounterX == 320 && !audio_fifo_empty) begin // Generate audio sample packet if possible
+      pkt_header[55:32] <= (channelStatusIdx == 0) ? 24'h10_11_02 : 24'h00_11_02;
+      subpkt0_data[71:64] <= 8'h0;
+      subpkt0_data[79:72] <= audio_fifo_out_left[7:0];
+      subpkt0_data[87:80] <= audio_fifo_out_left[15:8];
+      subpkt0_data[95:88] <= 8'h0;
+      subpkt0_data[103:96] <= audio_fifo_out_right[7:0];
+      subpkt0_data[111:104] <= audio_fifo_out_right[15:8];
+      subpkt0_data[119:112] <= (8'h11 | // Both channels valid
+        (^audio_fifo_out_left ? 8'h08 : 8'h00) |
+        (^audio_fifo_out_right ? 8'h80 : 8'h00)) ^
+        (channelStatus[channelStatusIdx] ? 8'hcc : 8'h00);
+      audio_fifo_rd_en <= 1'b1;
+    end else if (CounterX == 0) begin
+      // Send NULL packets by default
+      pkt_header <= 0;
+      subpkt0_data <= 0;
+      subpkt1_data <= 0;
+      subpkt2_data <= 0;
+      subpkt3_data <= 0;
     end
   end
-  */
 
   generate if (C_parallel == 1'b1) begin: G_parallel
       assign outp_red = latched_red;
