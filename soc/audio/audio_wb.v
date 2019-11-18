@@ -411,7 +411,7 @@ module audio_wb (
 		.wr_n(!bus_we),
 		.dout(ym2612_rdata),
 		.irq_n(ym2612_irq_n),
-		.en_hifi_pcm(1'b1),
+		.en_hifi_pcm(1'b0),
 		.snd_right(ym2612_out_r),
 		.snd_left(ym2612_out_l),
 		.snd_sample(ym2612_sample)
