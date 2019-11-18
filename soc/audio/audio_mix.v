@@ -43,6 +43,10 @@ module audio_mix (
 	input  wire [11:0] synth_dc,
 	input  wire [ 4:0] synth_voices,
 
+	// YM2612 input
+	input  wire [15:0] ym2612_l,
+	input  wire [15:0] ym2612_r,
+
 	// PCM input
 	input  wire [15:0] pcm,
 
@@ -85,8 +89,8 @@ module audio_mix (
 	// Post adder
 	always @(posedge clk)
 	begin
-		pa_l <= { {(12){synth_l[15]}}, synth_l, 8'h00 } + m_l;
-		pa_r <= { {(12){synth_r[15]}}, synth_r, 8'h00 } + m_r;
+		pa_l <= { {(12){synth_l[15]}}, synth_l, 8'h00 } + m_l + { {(12){ym2612_l[15]}}, ym2612_l, 8'h00 };
+		pa_r <= { {(12){synth_r[15]}}, synth_r, 8'h00 } + m_r + { {(12){ym2612_r[15]}}, ym2612_r, 8'h00 };
 	end
 
 	// Done for the 'normal' outputs
