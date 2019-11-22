@@ -40,7 +40,7 @@ module audio_wb (
 	output wire [15:0] audio_out_pdm,
 
 	// Bus interface
-	input  wire [15:0] bus_addr,
+	input  wire [16:0] bus_addr,
 	input  wire [31:0] bus_wdata,
 	output reg  [31:0] bus_rdata,
 	input  wire bus_cyc,
@@ -398,7 +398,7 @@ module audio_wb (
 	// FIFO read
 	assign sf_ren_i = stb_pcm;
 
-	assign ym2612_cs_n = !bus_addr[16];
+	assign ym2612_cs_n = !(bus_cyc & ~ack & bus_addr[16]);
 	assign ym2612_clk_en = ym2612_clk_div == 0;
 
 	jt12 jt12_I (
@@ -406,7 +406,7 @@ module audio_wb (
 		.clk(clk),
 		.cen(ym2612_clk_en),
 		.din(bus_wdata[7:0]),
-		.addr(bus_addr[9:2]), // one byte every 32 bit word
+		.addr(bus_addr[7:0]),
 		.cs_n(ym2612_cs_n),
 		.wr_n(!bus_we),
 		.dout(ym2612_rdata),
