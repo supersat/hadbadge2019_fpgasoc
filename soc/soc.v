@@ -682,7 +682,7 @@ module soc(
 		.audio_out_l(audio_l),
 		.audio_out_r(audio_r),
 		.audio_out_pdm(audio_pdm),
-		.bus_addr(mem_addr[17:2]),
+		.bus_addr(mem_addr[18:2]),
 		.bus_wdata(mem_wdata),
 		.bus_rdata(audio_rdata),
 		.bus_cyc(audio_select),
