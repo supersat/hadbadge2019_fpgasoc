@@ -83,7 +83,7 @@ module audio_mix (
 			m_r <= 36'h000000000;
 		end else begin
 			m_l <= $signed({pcm[15], pcm[15], pcm}) * { 10'd0, pcm_vol_l };
-			m_r <= $signed({pcm[15], pcm[15], pcm}) * { 10'd0, pcm_vol_l };
+			m_r <= $signed({pcm[15], pcm[15], pcm}) * { 10'd0, pcm_vol_r };
 		end
 
 	// Post adder
