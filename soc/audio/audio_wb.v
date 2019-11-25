@@ -40,7 +40,7 @@ module audio_wb (
 	output wire [15:0] audio_out_pdm,
 
 	// Bus interface
-	input  wire [16:0] bus_addr,
+	input  wire [16:0] bus_addr, // mem_addr[18:2]
 	input  wire [31:0] bus_wdata,
 	output reg  [31:0] bus_rdata,
 	input  wire bus_cyc,
@@ -63,10 +63,13 @@ module audio_wb (
 	wire [15:0] audio_synth_r;
 	wire [11:0] audio_synth_dc;
 
-	wire [15:0] ym2612_out_l;
-	wire [15:0] ym2612_out_r;
-	reg  [15:0] ym2612_synth_l;
-	reg  [15:0] ym2612_synth_r;
+	wire signed [15:0] ym2612_out_l;
+	wire signed [15:0] ym2612_out_r;
+	reg  signed [15:0] ym2612_accum_l;
+	reg  signed [15:0] ym2612_accum_r;
+	reg  signed [15:0] ym2612_synth_l;
+	reg  signed [15:0] ym2612_synth_r;
+	reg [2:0] ym2612_sample_cnt;
 	reg [2:0] ym2612_clk_div;
 	reg [7:0] ym2612_rdata;
 	wire ym2612_cs_n;
@@ -419,13 +422,30 @@ module audio_wb (
 
 	always @(posedge clk) begin
 		if (rst) begin
+			ym2612_accum_l <= 0;
+			ym2612_accum_r <= 0;
 			ym2612_synth_l <= 0;
 			ym2612_synth_r <= 0;
+			ym2612_sample_cnt <= 0;
 			ym2612_clk_div <= 0;
 		end else begin
+			if (ym2612_sample_cnt == 0) begin
+				ym2612_synth_l <= ym2612_accum_l;
+				ym2612_synth_r <= ym2612_accum_r;
+			end
+
 			if (ym2612_sample) begin
-				ym2612_synth_l <= ym2612_out_l;
-				ym2612_synth_r <= ym2612_out_r;
+				if (ym2612_sample_cnt == 0) begin
+					ym2612_accum_l <= ym2612_out_l;
+					ym2612_accum_r <= ym2612_out_r;
+				end else begin
+					ym2612_accum_l <= ym2612_accum_l + ym2612_out_l;
+					ym2612_accum_r <= ym2612_accum_r + ym2612_out_r;
+				end
+				if (ym2612_sample_cnt == 5)
+					ym2612_sample_cnt <= 0;
+				else
+					ym2612_sample_cnt <= ym2612_sample_cnt + 1;
 			end
 
 			if (ym2612_clk_div == 5)
