@@ -19,11 +19,11 @@ module fake_differential
     // register stage to improve timing of the fake differential
     reg [1:0] R_tmds_p[3:0], R_tmds_n[3:0];
     generate
-      genvar i;
-      for(i = 0; i < 4; i++)
+      genvar j;
+      for(j = 0; j < 4; j++)
       begin : TMDS_pn_registers
-        always @(posedge clk_shift) R_tmds_p[i] <=  tmds[i];
-        always @(posedge clk_shift) R_tmds_n[i] <= ~tmds[i];
+        always @(posedge clk_shift) R_tmds_p[j] <=  tmds[j];
+        always @(posedge clk_shift) R_tmds_n[j] <= ~tmds[j];
       end
     endgenerate
 
