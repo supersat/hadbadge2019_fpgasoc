@@ -61,11 +61,11 @@ output reg [C_bits_x - 1:0] CounterY
 parameter [31:0] C_resolution_x=640;
 parameter [31:0] C_hsync_front_porch=16;
 parameter [31:0] C_hsync_pulse=96;
-parameter [31:0] C_hsync_back_porch=44;
+parameter [31:0] C_hsync_back_porch=48;
 parameter [31:0] C_resolution_y=480;
 parameter [31:0] C_vsync_front_porch=10;
 parameter [31:0] C_vsync_pulse=2;
-parameter [31:0] C_vsync_back_porch=31;
+parameter [31:0] C_vsync_back_porch=33;
 parameter [31:0] C_bits_x=10;
 parameter [31:0] C_bits_y=10;
 parameter [31:0] C_dbl_x=0;

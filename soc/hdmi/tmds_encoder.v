@@ -57,8 +57,6 @@
 module tmds_encoder(
 input wire clk,
 input wire [7:0] data,
-input wire [1:0] c,
-input wire blank,
 output reg [9:0] encoded
 );
 
@@ -110,44 +108,24 @@ reg [3:0] dc_bias = 1'b0;
   assign data_word_disparity = 4'b1100 + data_word[0] + data_word[1] + data_word[2] + data_word[3] + data_word[4] + data_word[5] + data_word[6] + data_word[7];
   // Now work out what the output should be
   always @(posedge clk) begin
-    if(blank == 1'b1) begin
-      // In the control periods, all values have and have balanced bit count
-      case(c)
-      2'b00 : begin
-        encoded <= 10'b1101010100;
-      end
-      2'b01 : begin
-        encoded <= 10'b0010101011;
-      end
-      2'b10 : begin
-        encoded <= 10'b0101010100;
-      end
-      default : begin
-        encoded <= 10'b1010101011;
-      end
-      endcase
-      dc_bias <= {4{1'b0}};
-    end
-    else begin
-      if(dc_bias == 5'b00000 || data_word_disparity == 0) begin
-        // dataword has no disparity
-        if(data_word[8] == 1'b1) begin
-          encoded <= {2'b01,data_word[7:0]};
-          dc_bias <= dc_bias + data_word_disparity;
-        end
-        else begin
-          encoded <= {2'b10,data_word_inv[7:0]};
-          dc_bias <= dc_bias - data_word_disparity;
-        end
-      end
-      else if((dc_bias[3] == 1'b0 && data_word_disparity[3] == 1'b0) || (dc_bias[3] == 1'b1 && data_word_disparity[3] == 1'b1)) begin
-        encoded <= {1'b1,data_word[8],data_word_inv[7:0]};
-        dc_bias <= dc_bias + data_word[8] - data_word_disparity;
+    if(dc_bias == 5'b00000 || data_word_disparity == 0) begin
+      // dataword has no disparity
+      if(data_word[8] == 1'b1) begin
+        encoded <= {2'b01,data_word[7:0]};
+        dc_bias <= dc_bias + data_word_disparity;
       end
       else begin
-        encoded <= {1'b0,data_word};
-        dc_bias <= dc_bias - data_word_inv[8] + data_word_disparity;
+        encoded <= {2'b10,data_word_inv[7:0]};
+        dc_bias <= dc_bias - data_word_disparity;
       end
+    end
+    else if((dc_bias[3] == 1'b0 && data_word_disparity[3] == 1'b0) || (dc_bias[3] == 1'b1 && data_word_disparity[3] == 1'b1)) begin
+      encoded <= {1'b1,data_word[8],data_word_inv[7:0]};
+      dc_bias <= dc_bias + data_word[8] - data_word_disparity;
+    end
+    else begin
+      encoded <= {1'b0,data_word};
+      dc_bias <= dc_bias - data_word_inv[8] + data_word_disparity;
     end
   end
 

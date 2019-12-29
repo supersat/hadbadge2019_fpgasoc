@@ -140,14 +140,10 @@ reg [9:0] shift_clock = C_shift_clock_initial;
 reg R_shift_clock_off_sync = 1'b0;
 reg [7:0] R_shift_clock_synchronizer = 1'b0;
 reg [6:0] R_sync_fail;  // counts sync fails, after too many, reinitialize shift_clock
-parameter c_red = 1'b0;
-parameter c_green = 1'b0;
-wire [1:0] c_blue;
 wire [7:0] red_d;
 wire [7:0] green_d;
 wire [7:0] blue_d;
 
-  assign c_blue = {in_vsync,in_hsync};
   assign red_d[7:8 - C_depth] = in_red[C_depth - 1:0];
   assign green_d[7:8 - C_depth] = in_green[C_depth - 1:0];
   assign blue_d[7:8 - C_depth] = in_blue[C_depth - 1:0];
@@ -190,25 +186,31 @@ wire [7:0] blue_d;
   endgenerate
   // shift_clock_synchronizer
   tmds_encoder u21(
-      .clk(clk_pixel),
+    .clk(clk_pixel),
     .data(red_d),
-    .c(c_red),
-    .blank(in_blank),
     .encoded(encoded_red));
 
   tmds_encoder u22(
-      .clk(clk_pixel),
+    .clk(clk_pixel),
     .data(green_d),
-    .c(c_green),
-    .blank(in_blank),
     .encoded(encoded_green));
 
   tmds_encoder u23(
-      .clk(clk_pixel),
+    .clk(clk_pixel),
     .data(blue_d),
-    .c(c_blue),
-    .blank(in_blank),
     .encoded(encoded_blue));
+
+  function [9:0] ctl_encode;
+  input [1:0] ctl_in;
+  begin
+    case (ctl_in)
+      2'b00: ctl_encode = 10'b1101010100;
+      2'b01: ctl_encode = 10'b0010101011;
+      2'b10: ctl_encode = 10'b0101010100;
+      2'b11: ctl_encode = 10'b1010101011;  
+    endcase
+  end
+  endfunction
 
   function [9:0] terc4_encode;
   input [3:0] terc4_in;
@@ -242,44 +244,102 @@ wire [7:0] blue_d;
   reg [127:0] subpkt3_data;
 
   always @(posedge clk_pixel) begin
-    if (CounterX < 2) begin // Video Guard Band
-      latched_red <= 10'b1011001100;
-      latched_green <= 10'b0100110011;
-      latched_blue <= 10'b1011001100;
-    end else if (CounterX < 674) begin // Active pixel data and beginning of hsync pulse
-      latched_red <= encoded_red;
-      latched_green <= encoded_green;
-      latched_blue <= encoded_blue;
-    end else if (CounterX < 682) begin // Data island preamble
-      latched_red <= 0'b0010101011; // CTL2=1, CTL3=0
-      latched_green <= 10'b0010101011;  // CTL0=1, CTL1=0
-      latched_blue <= encoded_blue; // Regular hsync/vsync signal
-    end else if (CounterX < 684) begin // Data island leading guard band
-      latched_red <= 10'b0100110011;
-      latched_green <= 10'b0100110011;
-      latched_blue <= terc4_encode({ 2'b11, in_vsync, in_hsync });
-    end else if (CounterX < 748) begin // Data island packets
-      latched_red <=   terc4_encode({ subpkt3_data[(CounterX - 684) * 2 + 1],
-                                      subpkt2_data[(CounterX - 684) * 2 + 1],
-                                      subpkt1_data[(CounterX - 684) * 2 + 1],
-                                      subpkt0_data[(CounterX - 684) * 2 + 1] });
-      latched_green <= terc4_encode({ subpkt3_data[(CounterX - 684) * 2],
-                                      subpkt2_data[(CounterX - 684) * 2],
-                                      subpkt1_data[(CounterX - 684) * 2],
-                                      subpkt0_data[(CounterX - 684) * 2] });
-      latched_blue <= terc4_encode({ CounterX != 684, pkt_header[CounterX - 684], in_vsync, in_hsync });
-    end else if (CounterX < 750) begin // Data island trailing guard band
-      latched_red <= 10'b0100110011;
-      latched_green <= 10'b0100110011;
-      latched_blue <= terc4_encode({ 2'b11, in_vsync, in_hsync });
-    end else if (CounterX < 788) begin  // Regular ctrl period
-      latched_red <= encoded_red;
-      latched_green <= encoded_green;
-      latched_blue <= encoded_blue; 
-    end else begin // Video island preamble
-      latched_red <= 10'b1101010100; // CTL2=0, CTL3=0
-      latched_green <= 10'b0010101011; // CTL0=1, CTL1=0
-      latched_blue <= encoded_blue; // Regular hsync/vsync signal
+    if (CounterY < 480) begin
+      if (CounterX < 2) begin // Video Guard Band (0 - 1)
+        latched_red <= 10'b1011001100;
+        latched_green <= 10'b0100110011;
+        latched_blue <= 10'b1011001100;
+      end
+      if (CounterX >= 2 && CounterX < 642) begin // Active pixel data
+        latched_red <= encoded_red;
+        latched_green <= encoded_green;
+        latched_blue <= encoded_blue;
+      end
+      if (CounterX >= 642 && CounterX < 674) begin
+        latched_red <= ctl_encode(2'b00);
+        latched_green <= ctl_encode(2'b00);
+        latched_blue <= ctl_encode({ in_vsync, in_hsync });
+      end
+      if (CounterX >= 674 && CounterX < 682) begin // Data island preamble (674 - 681)
+        latched_red <= ctl_encode(2'b01); // CTL2=1, CTL3=0
+        latched_green <= ctl_encode(2'b01);  // CTL0=1, CTL1=0
+        latched_blue <= ctl_encode({ in_vsync, in_hsync }); // Regular hsync/vsync signal
+      end
+      if (CounterX >= 682 && CounterX < 684) begin // Data island leading guard band (682 - 683)
+        latched_red <= 10'b0100110011;
+        latched_green <= 10'b0100110011;
+        latched_blue <= terc4_encode({ 2'b11, in_vsync, in_hsync });
+      end
+      if (CounterX >= 684 && CounterX < 748) begin // Data island packets (684 - 747)
+        latched_red <=   terc4_encode({ subpkt3_data[(CounterX - 684) * 2 + 1],
+                                        subpkt2_data[(CounterX - 684) * 2 + 1],
+                                        subpkt1_data[(CounterX - 684) * 2 + 1],
+                                        subpkt0_data[(CounterX - 684) * 2 + 1] });
+        latched_green <= terc4_encode({ subpkt3_data[(CounterX - 684) * 2],
+                                        subpkt2_data[(CounterX - 684) * 2],
+                                        subpkt1_data[(CounterX - 684) * 2],
+                                        subpkt0_data[(CounterX - 684) * 2] });
+        latched_blue <= terc4_encode({ CounterX != 684, pkt_header[CounterX - 684], in_vsync, in_hsync });
+      end
+      if (CounterX >= 748 && CounterX < 750) begin // Data island trailing guard band (748 - 749)
+        latched_red <= 10'b0100110011;
+        latched_green <= 10'b0100110011;
+        latched_blue <= terc4_encode({ 2'b11, in_vsync, in_hsync });
+      end
+      if (CounterX >= 750 && CounterX < 792) begin  // Regular ctrl period (750 - 787)
+        latched_red <= ctl_encode(2'b00);
+        latched_green <= ctl_encode(2'b00);
+        latched_blue <= ctl_encode({ in_vsync, in_hsync }); 
+      end
+      if (CounterX >= 792) begin // Video island preamble (788 - 795)
+        latched_red <= ctl_encode(2'b00); // CTL2=0, CTL3=0
+        latched_green <= ctl_encode(2'b01); // CTL0=1, CTL1=0
+        latched_blue <= ctl_encode({ in_vsync, in_hsync }); // Regular hsync/vsync signal
+      end
+    end
+    if (CounterY >= 480) begin
+      if (CounterY == 490) begin
+        if (CounterX < 390) begin
+          latched_red <= ctl_encode(2'b00);
+          latched_green <= ctl_encode(2'b00);
+          latched_blue <= ctl_encode({ in_vsync, in_hsync }); // Regular hsync/vsync signal
+        end
+        if (CounterX >= 390 && CounterX < 398) begin
+          latched_red <= ctl_encode(2'b01); // CTL2=1, CTL3=0
+          latched_green <= ctl_encode(2'b01);  // CTL0=1, CTL1=0
+          latched_blue <= ctl_encode({ in_vsync, in_hsync }); // Regular hsync/vsync signal
+        end
+        if (CounterX >= 398 && CounterX < 400) begin
+          latched_red <= 10'b0100110011;
+          latched_green <= 10'b0100110011;
+          latched_blue <= terc4_encode({ 2'b11, in_vsync, in_hsync });
+        end
+        if (CounterX >= 400 && CounterX < 464) begin
+          latched_red <=   terc4_encode({ subpkt3_data[(CounterX - 384) * 2 + 1],
+                                          subpkt2_data[(CounterX - 384) * 2 + 1],
+                                          subpkt1_data[(CounterX - 384) * 2 + 1],
+                                          subpkt0_data[(CounterX - 384) * 2 + 1] });
+          latched_green <= terc4_encode({ subpkt3_data[(CounterX - 384) * 2],
+                                          subpkt2_data[(CounterX - 384) * 2],
+                                          subpkt1_data[(CounterX - 384) * 2],
+                                          subpkt0_data[(CounterX - 384) * 2] });
+          latched_blue <= terc4_encode({ CounterX != 384, pkt_header[CounterX - 384], in_vsync, in_hsync });
+        end
+        if (CounterX >= 464 && CounterX < 466) begin
+          latched_red <= 10'b0100110011;
+          latched_green <= 10'b0100110011;
+          latched_blue <= terc4_encode({ 2'b11, in_vsync, in_hsync });
+        end
+        if (CounterX >= 466) begin
+          latched_red <= ctl_encode(2'b00);
+          latched_green <= ctl_encode(2'b00);
+          latched_blue <= ctl_encode({ in_vsync, in_hsync }); // Regular hsync/vsync signal
+        end
+      end else begin
+        latched_red <= ctl_encode(2'b00);
+        latched_green <= ctl_encode(2'b00);
+        latched_blue <= ctl_encode({ in_vsync, in_hsync }); // Regular hsync/vsync signal
+      end
     end
   end
 
@@ -290,9 +350,9 @@ wire [7:0] blue_d;
   always @(posedge clk_pixel) begin
     audio_fifo_rd_en <= 1'b0;
 
-    
+    /*
     if (CounterX == 0) begin
-      if (CounterY == 522) begin
+      if (CounterY == 490) begin
         // Generate Auxiliary Video information video and audio infoframes
         pkt_header[23:0] <= 24'h0d_02_82;
         pkt_header[55:32] <= 24'h0a_01_84;
@@ -307,7 +367,7 @@ wire [7:0] blue_d;
       end else if (CounterY == 0) begin // Generate Audio Clock Regeneration
         pkt_header[23:0] <= 24'h00_00_01;
         subpkt0_data[55:0] <= 56'h00_10_00_18_6a_00_00;
-      end else if (!audio_fifo_empty) begin // Generate audio sample packet if possible
+      end else if (CounterY < 482 && !audio_fifo_empty) begin // Generate audio sample packet if possible
         pkt_header[23:0] <= (channelStatusIdx == 0) ? 24'h10_11_02 : 24'h00_11_02;
         subpkt0_data[7:0] <= 8'h0;
         subpkt0_data[15:8] <= audio_fifo_out_left[7:0];
@@ -326,7 +386,7 @@ wire [7:0] blue_d;
         pkt_header[23:0] <= 0;
         subpkt0_data[55:0] <= 0;
       end
-    end else if (CounterX == 320 && CounterY != 522) begin
+    end else if (CounterX == 320 && CounterY < 482) begin
       if (!audio_fifo_empty) begin // Generate audio sample packet if possible
         pkt_header[55:32] <= (channelStatusIdx == 0) ? 24'h10_11_02 : 24'h00_11_02;
         subpkt0_data[71:64] <= 8'h0;
@@ -347,8 +407,56 @@ wire [7:0] blue_d;
         subpkt0_data[119:64] <= 0;
       end
     end
-  end
+    */
 
+    if (CounterX == 0) begin
+      pkt_header <= 32'h00_0d_02_82;
+      subpkt0_data <= 64'h00_00_00_00_00_00_40_2f;
+    end
+    
+    if (CounterX >= 16 && CounterX < 40) begin
+      pkt_header[31:24] <= {1'b0, pkt_header[31:25]} ^
+        (pkt_header[24] ^ pkt_header[CounterX - 16] ?
+        8'h83 : 0);
+    end
+    if (CounterX >= 16 && CounterX < 72) begin
+      subpkt0_data[63:56] <= {1'b0, subpkt0_data[63:57]} ^
+        (subpkt0_data[56] ^ subpkt0_data[CounterX - 16] ?
+        8'h83 : 0);
+      subpkt1_data[63:56] <= {1'b0, subpkt1_data[63:57]} ^
+        (subpkt1_data[56] ^ subpkt1_data[CounterX - 16] ?
+        8'h83 : 0);
+      subpkt2_data[63:56] <= {1'b0, subpkt2_data[63:57]} ^
+        (subpkt2_data[56] ^ subpkt2_data[CounterX - 16] ?
+        8'h83 : 0);
+      subpkt3_data[63:56] <= {1'b0, subpkt3_data[63:57]} ^
+        (subpkt3_data[56] ^ subpkt3_data[CounterX - 16] ?
+        8'h83 : 0);
+    end
+
+    /*
+    if (CounterX >= 336 && CounterX < 360) begin
+      pkt_header[63:56] <= {1'b0, pkt_header[63:57]} ^
+        (pkt_header[56] ^ pkt_header[CounterX - 304] ?
+        8'h83 : 0);
+    end
+    if (CounterX >= 336 && CounterX < 392) begin
+      subpkt0_data[127:120] <= {1'b0, subpkt0_data[127:121]} ^
+        (subpkt0_data[120] ^ subpkt0_data[CounterX - 304] ?
+        8'h83 : 0);
+      subpkt1_data[127:120] <= {1'b0, subpkt1_data[127:121]} ^
+        (subpkt1_data[120] ^ subpkt1_data[CounterX - 304] ?
+        8'h83 : 0);
+      subpkt2_data[127:120] <= {1'b0, subpkt2_data[127:121]} ^
+        (subpkt2_data[120] ^ subpkt2_data[CounterX - 304] ?
+        8'h83 : 0);
+      subpkt3_data[127:120] <= {1'b0, subpkt3_data[127:121]} ^
+        (subpkt3_data[120] ^ subpkt3_data[CounterX - 304] ?
+        8'h83 : 0);
+    end
+    */
+  end
+  
   generate if (C_parallel == 1'b1) begin: G_parallel
       assign outp_red = latched_red;
     assign outp_green = latched_green;
