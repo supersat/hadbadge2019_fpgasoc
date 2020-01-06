@@ -19,3 +19,6 @@
 [submodule "app-badgetris"]
 	path = app-badgetris
 	url = https://github.com/szczys/badgetris-2019supercon.git
+[submodule "soc/jt12"]
+	path = soc/jt12
+	url = https://github.com/jotego/jt12.git

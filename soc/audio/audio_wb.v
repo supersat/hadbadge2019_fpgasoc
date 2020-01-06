@@ -40,7 +40,7 @@ module audio_wb (
 	output wire [15:0] audio_out_pdm,
 
 	// Bus interface
-	input  wire [15:0] bus_addr,
+	input  wire [16:0] bus_addr, // mem_addr[18:2]
 	input  wire [31:0] bus_wdata,
 	output reg  [31:0] bus_rdata,
 	input  wire bus_cyc,
@@ -62,6 +62,20 @@ module audio_wb (
 	wire [15:0] audio_synth_l;
 	wire [15:0] audio_synth_r;
 	wire [11:0] audio_synth_dc;
+
+	wire signed [15:0] ym2612_out_l;
+	wire signed [15:0] ym2612_out_r;
+	reg  signed [15:0] ym2612_accum_l;
+	reg  signed [15:0] ym2612_accum_r;
+	reg  signed [15:0] ym2612_synth_l;
+	reg  signed [15:0] ym2612_synth_r;
+	reg [2:0] ym2612_sample_cnt;
+	reg [2:0] ym2612_clk_div;
+	reg [7:0] ym2612_rdata;
+	wire ym2612_cs_n;
+	wire ym2612_clk_en;
+	wire ym2612_irq_n;
+	wire ym2612_sample;
 
 	// Strobes
 	wire stb_pcm;
@@ -387,6 +401,59 @@ module audio_wb (
 	// FIFO read
 	assign sf_ren_i = stb_pcm;
 
+	assign ym2612_cs_n = !(bus_cyc & ~ack & bus_addr[16]);
+	assign ym2612_clk_en = ym2612_clk_div == 0;
+
+	jt12 jt12_I (
+		.rst(rst),
+		.clk(clk),
+		.cen(ym2612_clk_en),
+		.din(bus_wdata[7:0]),
+		.addr(bus_addr[7:0]),
+		.cs_n(ym2612_cs_n),
+		.wr_n(!bus_we),
+		.dout(ym2612_rdata),
+		.irq_n(ym2612_irq_n),
+		.en_hifi_pcm(1'b0),
+		.snd_right(ym2612_out_r),
+		.snd_left(ym2612_out_l),
+		.snd_sample(ym2612_sample)
+	);
+
+	always @(posedge clk) begin
+		if (rst) begin
+			ym2612_accum_l <= 0;
+			ym2612_accum_r <= 0;
+			ym2612_synth_l <= 0;
+			ym2612_synth_r <= 0;
+			ym2612_sample_cnt <= 0;
+			ym2612_clk_div <= 0;
+		end else begin
+			if (ym2612_sample_cnt == 0) begin
+				ym2612_synth_l <= ym2612_accum_l;
+				ym2612_synth_r <= ym2612_accum_r;
+			end
+
+			if (ym2612_sample) begin
+				if (ym2612_sample_cnt == 0) begin
+					ym2612_accum_l <= ym2612_out_l;
+					ym2612_accum_r <= ym2612_out_r;
+				end else begin
+					ym2612_accum_l <= ym2612_accum_l + ym2612_out_l;
+					ym2612_accum_r <= ym2612_accum_r + ym2612_out_r;
+				end
+				if (ym2612_sample_cnt == 5)
+					ym2612_sample_cnt <= 0;
+				else
+					ym2612_sample_cnt <= ym2612_sample_cnt + 1;
+			end
+
+			if (ym2612_clk_div == 5)
+				ym2612_clk_div <= 0;
+			else
+				ym2612_clk_div <= ym2612_clk_div + 1;
+		end
+	end
 
 	// Final Audio Mixer
 	// -----------------
@@ -400,6 +467,8 @@ module audio_wb (
 		.pcm_vol_l(cfg_pcm_volume_l),
 		.pcm_vol_r(cfg_pcm_volume_r),
 		.pcm_ena(~sf_empty & cfg_pcm_enable),
+		.ym2612_l(ym2612_synth_l),
+		.ym2612_r(ym2612_synth_r),
 		.out_l(audio_out_l),
 		.out_r(audio_out_r),
 		.out_pdm(audio_out_pdm),
@@ -426,7 +495,7 @@ module audio_wb (
 	// -------------
 
 	// Ack
-	assign ack_nxt = bus_cyc & ~ack;
+	assign ack_nxt = bus_addr[16] ? (bus_cyc & ym2612_clk_en & ~ack) : (bus_cyc & ~ack);
 
 	always @(posedge clk)
 		ack <= ack_nxt;
@@ -442,9 +511,9 @@ module audio_wb (
 			bwe_pcm_cfg   <= 1'b0;
 			bwe_pcm_data  <= 1'b0;
 		end else begin
-			bwe_audio_csr <= (bus_addr[15:14] == 2'b00) & (bus_addr[1:0] == 2'b00);
-			bwe_pcm_cfg   <= (bus_addr[15:14] == 2'b00) & (bus_addr[1:0] == 2'b10);
-			bwe_pcm_data  <= (bus_addr[15:14] == 2'b00) & (bus_addr[1:0] == 2'b11);
+			bwe_audio_csr <= (bus_addr[16:14] == 3'b000) & (bus_addr[1:0] == 2'b00);
+			bwe_pcm_cfg   <= (bus_addr[16:14] == 3'b000) & (bus_addr[1:0] == 2'b10);
+			bwe_pcm_data  <= (bus_addr[16:14] == 3'b000) & (bus_addr[1:0] == 2'b11);
 		end
 
 	assign cf_overflow_clr  = bwe_audio_csr & bus_wdata[19];
@@ -501,7 +570,7 @@ module audio_wb (
 		if (wr_rst)
 			wtw_ena <= 1'b0;
 		else
-			wtw_ena <= (bus_addr[15:14] == 2'b01);
+			wtw_ena <= (bus_addr[16:14] == 3'b001);
 
 	// Config Bus write
 	assign cb0_data  = bus_wdata;
@@ -513,8 +582,8 @@ module audio_wb (
 			cb0_stb_v <= 1'b0;
 			cb0_stb_g <= 1'b0;
 		end else begin
-			cb0_stb_v <= (bus_addr[15:14] == 2'b10) & ~bus_addr[7];
-			cb0_stb_g <= (bus_addr[15:14] == 2'b10) &  bus_addr[7];
+			cb0_stb_v <= (bus_addr[16:14] == 3'b010) & ~bus_addr[7];
+			cb0_stb_g <= (bus_addr[16:14] == 3'b010) &  bus_addr[7];
 		end
 
 	// Command queue write
@@ -522,7 +591,7 @@ module audio_wb (
 		if (wr_rst)
 			cf_wen_i <= 1'b0;
 		else
-			cf_wen_i <= (bus_addr[15:14] == 2'b11);
+			cf_wen_i <= (bus_addr[16:14] == 3'b011);
 
 	always @(*)
 	begin
@@ -548,12 +617,13 @@ module audio_wb (
 		if (rd_rst)
 			bus_rdata <= 32'h00000000;
 		else
-			casez ({bus_addr[15], bus_addr[1:0]})
-				3'b000:  bus_rdata <= rd_csr;
-				3'b001:  bus_rdata <= rd_evt;
-				3'b010:  bus_rdata <= rd_pcm_cfg;
-				3'b011:  bus_rdata <= 32'h00000000;
-				3'b1zz:  bus_rdata <= crb_data;
+			casez ({bus_addr[16], bus_addr[15], bus_addr[1:0]})
+				4'b0000:  bus_rdata <= rd_csr;
+				4'b0001:  bus_rdata <= rd_evt;
+				4'b0010:  bus_rdata <= rd_pcm_cfg;
+				4'b0011:  bus_rdata <= 32'h00000000;
+				4'b01zz:  bus_rdata <= crb_data;
+				4'b1zzz:  bus_rdata <= { 24'h0, ym2612_rdata };
 				default: bus_rdata <= 32'h00000000;
 			endcase
 
