@@ -44,7 +44,7 @@ module hdmi_encoder (
 	wire [9:0] CounterX, CounterY;
 	vga vga_instance (
 		.clk_pixel(clk_pixel),
-		.test_picture(1'b1), // enable test picture generation
+		.test_picture(1'b0),
 		.vga_r(vga_r),
 		.vga_g(vga_g),
 		.vga_b(vga_b),

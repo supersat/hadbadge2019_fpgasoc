@@ -102,18 +102,18 @@ wire audio_fifo_empty;
 assign audio_fifo_out_left = audio_fifo_out[31:16];
 assign audio_fifo_out_right = audio_fifo_out[15:0];
 
-// For 32kHz audio, you get 4 samples every 3125 pixel clocks
+// For 32kHz audio and a 25.2 MHz pixel clock,
+// you get 2 samples every 1575 pixels
 reg [11:0] audio_fifo_wr_clk_div_ctr;
 wire audio_fifo_wr_en;
 assign audio_fifo_wr_en =
   (audio_fifo_wr_clk_div_ctr == 12'd0) ||
-  (audio_fifo_wr_clk_div_ctr == 12'd1563) ||
-  (audio_fifo_wr_clk_div_ctr == 12'd2344);
+  (audio_fifo_wr_clk_div_ctr == 12'd787);
 
 reg audio_fifo_rd_en;
 
 always @(posedge clk_pixel) begin
-  if (rst || audio_fifo_wr_clk_div_ctr >= 12'd3125)
+  if (rst || audio_fifo_wr_clk_div_ctr >= 12'd1574)
     audio_fifo_wr_clk_div_ctr = 0;
   else
     audio_fifo_wr_clk_div_ctr = audio_fifo_wr_clk_div_ctr + 1;
@@ -350,25 +350,25 @@ wire [7:0] blue_d;
   always @(posedge clk_pixel) begin
     audio_fifo_rd_en <= 1'b0;
 
-    /*
-    if (CounterX == 0) begin
-      if (CounterY == 490) begin
-        // Generate Auxiliary Video information video and audio infoframes
-        pkt_header[23:0] <= 24'h0d_02_82;
-        pkt_header[55:32] <= 24'h0a_01_84;
-        subpkt0_data[55:0] <= 56'h00_10_02_97;
-        subpkt1_data[55:0] <= 56'h0;
-        subpkt2_data[55:0] <= 56'h0;
-        subpkt3_data[55:0] <= 56'h0;
-        subpkt0_data[119:64] <= 56'h11_60;
-        subpkt1_data[119:64] <= 56'h0;
-        subpkt2_data[119:64] <= 56'h0;
-        subpkt3_data[119:64] <= 56'h0;
-      end else if (CounterY == 0) begin // Generate Audio Clock Regeneration
-        pkt_header[23:0] <= 24'h00_00_01;
-        subpkt0_data[55:0] <= 56'h00_10_00_18_6a_00_00;
-      end else if (CounterY < 482 && !audio_fifo_empty) begin // Generate audio sample packet if possible
-        pkt_header[23:0] <= (channelStatusIdx == 0) ? 24'h10_11_02 : 24'h00_11_02;
+  if (CounterY == 490 && CounterX == 0) begin
+    // Generate Auxiliary Video information video and audio infoframes
+    pkt_header[31:0] <= 32'h0d_02_82;
+    pkt_header[63:32] <= 32'h0a_01_84;
+    subpkt0_data[63:0] <= 64'h00_10_02_97;
+    subpkt1_data[63:0] <= 64'h0;
+    subpkt2_data[63:0] <= 64'h0;
+    subpkt3_data[63:0] <= 64'h0;
+    subpkt0_data[127:64] <= 64'h11_60;
+    subpkt1_data[127:64] <= 64'h0;
+    subpkt2_data[127:64] <= 64'h0;
+    subpkt3_data[127:64] <= 64'h0;
+  end else if (CounterY == 0 && CounterX == 0) begin // Generate Audio Clock Regeneration
+    pkt_header[63:0] <= 64'h00_00_01;
+    subpkt0_data[127:0] <= 128'h00_10_00_18_6a_00_00;
+  end else if (CounterY > 0 && CounterY < 482) begin
+    if (CounterX == 0) begin 
+      if (!audio_fifo_empty) begin // Generate audio sample packet if possible
+        pkt_header[31:0] <= (channelStatusIdx == 0) ? 32'h10_11_02 : 32'h00_11_02;
         subpkt0_data[7:0] <= 8'h0;
         subpkt0_data[15:8] <= audio_fifo_out_left[7:0];
         subpkt0_data[23:16] <= audio_fifo_out_left[15:8];
@@ -379,16 +379,17 @@ wire [7:0] blue_d;
           (^audio_fifo_out_left ? 8'h08 : 8'h00) |
           (^audio_fifo_out_right ? 8'h80 : 8'h00)) ^
           (channelStatus[channelStatusIdx] ? 8'hcc : 8'h00);
+        subpkt0_data[63:56] <= 0;
         audio_fifo_rd_en <= 1'b1;
         channelStatusIdx <= channelStatusIdx == 8'd191 ? 0 : channelStatusIdx + 1; 
       end else begin
         // Send NULL packets by default
-        pkt_header[23:0] <= 0;
-        subpkt0_data[55:0] <= 0;
+        pkt_header[31:0] <= 0;
+        subpkt0_data[63:0] <= 0;
       end
-    end else if (CounterX == 320 && CounterY < 482) begin
+    end else if (CounterX == 320) begin
       if (!audio_fifo_empty) begin // Generate audio sample packet if possible
-        pkt_header[55:32] <= (channelStatusIdx == 0) ? 24'h10_11_02 : 24'h00_11_02;
+        pkt_header[63:32] <= (channelStatusIdx == 0) ? 32'h10_11_02 : 32'h00_11_02;
         subpkt0_data[71:64] <= 8'h0;
         subpkt0_data[79:72] <= audio_fifo_out_left[7:0];
         subpkt0_data[87:80] <= audio_fifo_out_left[15:8];
@@ -399,20 +400,16 @@ wire [7:0] blue_d;
           (^audio_fifo_out_left ? 8'h08 : 8'h00) |
           (^audio_fifo_out_right ? 8'h80 : 8'h00)) ^
           (channelStatus[channelStatusIdx] ? 8'hcc : 8'h00);
+        subpkt0_data[127:120] <= 0;
         audio_fifo_rd_en <= 1'b1;
         channelStatusIdx <= channelStatusIdx == 8'd191 ? 0 : channelStatusIdx + 1;
       end else begin
         // Send NULL packets by default
-        pkt_header[55:32] <= 0;
-        subpkt0_data[119:64] <= 0;
+        pkt_header[63:32] <= 0;
+        subpkt0_data[127:64] <= 0;
       end
     end
-    */
-
-    if (CounterX == 0) begin
-      pkt_header <= 32'h00_0d_02_82;
-      subpkt0_data <= 64'h00_00_00_00_00_00_40_2f;
-    end
+  end
     
     if (CounterX >= 16 && CounterX < 40) begin
       pkt_header[31:24] <= {1'b0, pkt_header[31:25]} ^
@@ -434,7 +431,6 @@ wire [7:0] blue_d;
         8'h83 : 0);
     end
 
-    /*
     if (CounterX >= 336 && CounterX < 360) begin
       pkt_header[63:56] <= {1'b0, pkt_header[63:57]} ^
         (pkt_header[56] ^ pkt_header[CounterX - 304] ?
@@ -442,19 +438,18 @@ wire [7:0] blue_d;
     end
     if (CounterX >= 336 && CounterX < 392) begin
       subpkt0_data[127:120] <= {1'b0, subpkt0_data[127:121]} ^
-        (subpkt0_data[120] ^ subpkt0_data[CounterX - 304] ?
+        (subpkt0_data[120] ^ subpkt0_data[CounterX - 400] ?
         8'h83 : 0);
       subpkt1_data[127:120] <= {1'b0, subpkt1_data[127:121]} ^
-        (subpkt1_data[120] ^ subpkt1_data[CounterX - 304] ?
+        (subpkt1_data[120] ^ subpkt1_data[CounterX - 400] ?
         8'h83 : 0);
       subpkt2_data[127:120] <= {1'b0, subpkt2_data[127:121]} ^
-        (subpkt2_data[120] ^ subpkt2_data[CounterX - 304] ?
+        (subpkt2_data[120] ^ subpkt2_data[CounterX - 400] ?
         8'h83 : 0);
       subpkt3_data[127:120] <= {1'b0, subpkt3_data[127:121]} ^
-        (subpkt3_data[120] ^ subpkt3_data[CounterX - 304] ?
+        (subpkt3_data[120] ^ subpkt3_data[CounterX - 400] ?
         8'h83 : 0);
     end
-    */
   end
   
   generate if (C_parallel == 1'b1) begin: G_parallel
