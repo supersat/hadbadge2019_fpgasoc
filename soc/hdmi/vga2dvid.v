@@ -364,11 +364,14 @@ wire [7:0] blue_d;
     subpkt3_data[127:64] <= 64'h0;
   end else if (CounterY == 0 && CounterX == 0) begin // Generate Audio Clock Regeneration
     pkt_header[63:0] <= 64'h00_00_01;
-    subpkt0_data[127:0] <= 128'h00_10_00_18_6a_00_00;
+    subpkt0_data[127:0] <= 128'h00_10_00_70_62_00_00;
+    subpkt1_data[127:0] <= 128'h00_10_00_70_62_00_00;
+    //subpkt2_data[127:0] <= 128'h00_10_00_70_62_00_00;
+    //subpkt3_data[127:0] <= 128'h00_10_00_70_62_00_00;
   end else if (CounterY > 0 && CounterY < 482) begin
     if (CounterX == 0) begin 
       if (!audio_fifo_empty) begin // Generate audio sample packet if possible
-        pkt_header[31:0] <= (channelStatusIdx == 0) ? 32'h10_11_02 : 32'h00_11_02;
+        pkt_header[31:0] <= (channelStatusIdx == 0) ? 32'hF0_11_02 : 32'h00_11_02;
         subpkt0_data[7:0] <= 8'h0;
         subpkt0_data[15:8] <= audio_fifo_out_left[7:0];
         subpkt0_data[23:16] <= audio_fifo_out_left[15:8];
