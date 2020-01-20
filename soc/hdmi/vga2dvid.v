@@ -372,45 +372,47 @@ wire [7:0] blue_d;
     if (CounterX == 0) begin 
       if (!audio_fifo_empty) begin // Generate audio sample packet if possible
         pkt_header[31:0] <= (channelStatusIdx == 0) ? 32'hF0_11_02 : 32'h00_11_02;
-        subpkt0_data[7:0] <= 8'h0;
-        subpkt0_data[15:8] <= audio_fifo_out_left[7:0];
-        subpkt0_data[23:16] <= audio_fifo_out_left[15:8];
-        subpkt0_data[31:24] <= 8'h0;
-        subpkt0_data[39:32] <= audio_fifo_out_right[7:0];
-        subpkt0_data[47:40] <= audio_fifo_out_right[15:8];
-        subpkt0_data[55:48] <= (8'h11 | // Both channels valid
-          (^audio_fifo_out_left ? 8'h08 : 8'h00) |
-          (^audio_fifo_out_right ? 8'h80 : 8'h00)) ^
-          (channelStatus[channelStatusIdx] ? 8'hcc : 8'h00);
-        subpkt0_data[63:56] <= 0;
         audio_fifo_rd_en <= 1'b1;
-        channelStatusIdx <= channelStatusIdx == 8'd191 ? 0 : channelStatusIdx + 1; 
       end else begin
         // Send NULL packets by default
         pkt_header[31:0] <= 0;
         subpkt0_data[63:0] <= 0;
       end
+    end else if (CounterX == 1 && audio_fifo_rd_en) begin
+      subpkt0_data[7:0] <= 8'h0;
+      subpkt0_data[15:8] <= audio_fifo_out_left[7:0];
+      subpkt0_data[23:16] <= audio_fifo_out_left[15:8];
+      subpkt0_data[31:24] <= 8'h0;
+      subpkt0_data[39:32] <= audio_fifo_out_right[7:0];
+      subpkt0_data[47:40] <= audio_fifo_out_right[15:8];
+      subpkt0_data[55:48] <= (8'h11 | // Both channels valid
+        (^audio_fifo_out_left ? 8'h08 : 8'h00) |
+        (^audio_fifo_out_right ? 8'h80 : 8'h00)) ^
+        (channelStatus[channelStatusIdx] ? 8'hcc : 8'h00);
+      subpkt0_data[63:56] <= 0;
+      channelStatusIdx <= channelStatusIdx == 8'd191 ? 0 : channelStatusIdx + 1;
     end else if (CounterX == 320) begin
       if (!audio_fifo_empty) begin // Generate audio sample packet if possible
         pkt_header[63:32] <= (channelStatusIdx == 0) ? 32'h10_11_02 : 32'h00_11_02;
-        subpkt0_data[71:64] <= 8'h0;
-        subpkt0_data[79:72] <= audio_fifo_out_left[7:0];
-        subpkt0_data[87:80] <= audio_fifo_out_left[15:8];
-        subpkt0_data[95:88] <= 8'h0;
-        subpkt0_data[103:96] <= audio_fifo_out_right[7:0];
-        subpkt0_data[111:104] <= audio_fifo_out_right[15:8];
-        subpkt0_data[119:112] <= (8'h11 | // Both channels valid
-          (^audio_fifo_out_left ? 8'h08 : 8'h00) |
-          (^audio_fifo_out_right ? 8'h80 : 8'h00)) ^
-          (channelStatus[channelStatusIdx] ? 8'hcc : 8'h00);
-        subpkt0_data[127:120] <= 0;
         audio_fifo_rd_en <= 1'b1;
-        channelStatusIdx <= channelStatusIdx == 8'd191 ? 0 : channelStatusIdx + 1;
       end else begin
         // Send NULL packets by default
         pkt_header[63:32] <= 0;
         subpkt0_data[127:64] <= 0;
       end
+    end else if (CounterX == 321 && audio_fifo_rd_en) begin
+      subpkt0_data[71:64] <= 8'h0;
+      subpkt0_data[79:72] <= audio_fifo_out_left[7:0];
+      subpkt0_data[87:80] <= audio_fifo_out_left[15:8];
+      subpkt0_data[95:88] <= 8'h0;
+      subpkt0_data[103:96] <= audio_fifo_out_right[7:0];
+      subpkt0_data[111:104] <= audio_fifo_out_right[15:8];
+      subpkt0_data[119:112] <= (8'h11 | // Both channels valid
+        (^audio_fifo_out_left ? 8'h08 : 8'h00) |
+        (^audio_fifo_out_right ? 8'h80 : 8'h00)) ^
+        (channelStatus[channelStatusIdx] ? 8'hcc : 8'h00);
+      subpkt0_data[127:120] <= 0;
+      channelStatusIdx <= channelStatusIdx == 8'd191 ? 0 : channelStatusIdx + 1;
     end
   end
     
